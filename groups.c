@@ -18,17 +18,20 @@ typedef struct {
 } Message;
 
 void process_user_messages(const char *userFile, int userID, int write_pipe) {
+    char buffer[MAX_MSG_SIZE];
+    
     FILE *file = fopen(userFile, "r");
     if (!file) {
         perror("Error opening user file");
         exit(EXIT_FAILURE);
     }
 
-    char buffer[MAX_MSG_SIZE];
     while (fgets(buffer, MAX_MSG_SIZE, file)) {
+        strtok(buffer, "\n");  // Remove newline character
         write(write_pipe, buffer, strlen(buffer) + 1);
         sleep(1);  // Simulating message delay
     }
+    
     fclose(file);
     close(write_pipe);
 }
@@ -39,7 +42,10 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    FILE *file = fopen(argv[1], "r");
+    char groupFilePath[256];
+    snprintf(groupFilePath, sizeof(groupFilePath), "%s", argv[1]);
+
+    FILE *file = fopen(groupFilePath, "r");
     if (!file) {
         perror("Error opening group file");
         exit(EXIT_FAILURE);
@@ -54,18 +60,32 @@ int main(int argc, char *argv[]) {
     }
     fclose(file);
 
+    // ✅ Construct the correct user file paths
+    char userFilePath[MAX_USERS][256];
+    for (int i = 0; i < num_users; i++) {
+        snprintf(userFilePath[i], sizeof(userFilePath[i]), "testcase_1/%s", userFiles[i]);
+
+        // ✅ Check if user file exists before proceeding
+        FILE *userFile = fopen(userFilePath[i], "r");
+        if (!userFile) {
+            fprintf(stderr, "Error: User file %s not found\n", userFilePath[i]);
+            exit(EXIT_FAILURE);
+        }
+        fclose(userFile);
+    }
+
     int pipes[num_users][2];
     for (int i = 0; i < num_users; i++) {
         pipe(pipes[i]);
         if (fork() == 0) {
             close(pipes[i][0]);
-            process_user_messages(userFiles[i], i, pipes[i][1]);
+            process_user_messages(userFilePath[i], i, pipes[i][1]);
             exit(0);
         }
         close(pipes[i][1]);
     }
 
-    // Read messages from pipes
+    // ✅ Read messages from pipes
     for (int i = 0; i < num_users; i++) {
         char buffer[MAX_MSG_SIZE];
         while (read(pipes[i][0], buffer, MAX_MSG_SIZE) > 0) {
